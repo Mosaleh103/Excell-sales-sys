@@ -1584,32 +1584,72 @@ function wireButtons(){
   document.getElementById('btn-print-perf').addEventListener('click',()=>{document.getElementById('ph-sub').textContent='تقرير أداء — '+CP.fullname;window.print();});
   document.getElementById('btn-print-customers').addEventListener('click',()=>{document.getElementById('ph-sub').textContent='قائمة العملاء';window.print();});
   document.getElementById('btn-print-class').addEventListener('click',()=>{document.getElementById('ph-sub').textContent='تقرير تصنيف العملاء';window.print();});
-  document.getElementById('btn-print-tp').addEventListener('click',()=>{document.getElementById('ph-sub').textContent='المنتجات الأكثر حركة';window.print();});
-  document.getElementById('btn-print-stagnant').addEventListener('click',()=>{document.getElementById('ph-sub').textContent='المنتجات الراكدة';window.print();});
-  document.getElementById('btn-print-rep').addEventListener('click',()=>{document.getElementById('ph-sub').textContent='تقرير الشركة الشامل';window.print();});
-  // Auth state change for password reset
-  sb.auth.onAuthStateChange(async(event,session)=>{
-    if(event==='PASSWORD_RECOVERY'){
-      CU=session.user;
-      const {data:prof}=await sb.from('profiles').select('*').eq('id',CU.id).single();
-      CP=prof;
-      document.getElementById('login-screen').style.display='none';
-      document.getElementById('chpw-sub').textContent='أدخل كلمة مرور جديدة';
-      document.getElementById('chpw-overlay').style.display='flex';
+// السطر 1587 - أزرار الطباعة (تم تعديلها لتعمل بشكل آمن لا يسبب تجمد الصفحة)
+  const printMapping = {
+    'btn-print-daily': 'مبيعات يوم ' + (document.getElementById('v-date')?.value || ''),
+    'btn-print-plan': 'الخطة الشهرية',
+    'btn-print-weekly': 'المتابعة الأسبوعية',
+    'btn-print-perf': 'تقرير أداء',
+    'btn-print-customers': 'قائمة العملاء',
+    'btn-print-class': 'تقرير تصنيف العملاء',
+    'btn-print-tp': 'المنتجات الأكثر حركة',
+    'btn-print-stagnant': 'المنتجات الراكدة',
+    'btn-print-rep': 'تقرير الشركة الشامل'
+  };
+
+  Object.keys(printMapping).forEach(id => {
+    const btn = document.getElementById(id);
+    if (btn) {
+      btn.addEventListener('click', () => {
+        const ph = document.getElementById('ph-sub');
+        if (ph) ph.textContent = printMapping[id];
+        window.print();
+      });
+    }
+  });
+
+  // مراقبة حالة تغيير كلمة المرور
+  if (typeof sb !== 'undefined') {
+    sb.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'PASSWORD_RECOVERY' && session) {
+        CU = session.user;
+        const { data: prof } = await sb.from('profiles').select('*').eq('id', CU.id).single();
+        if (prof) {
+          CP = prof;
+          document.getElementById('login-screen').style.display = 'none';
+          document.getElementById('chpw-sub').textContent = 'أدخل كلمة مرور جديدة';
+          document.getElementById('chpw-overlay').style.display = 'flex';
+        }
+      }
+    });
+  }
+}
+
+// ── 1. تشغيل تفعيل الأزرار ──
+wireButtons();
+
+// ── 2. التحقق من الجلسة عند تحميل الصفحة ──
+if (typeof sb !== 'undefined') {
+  sb.auth.getSession().then(({data:{session}}) => {
+    if (session) {
+      CU = session.user;
+      sb.from('profiles').select('*').eq('id', CU.id).single().then(({data:prof}) => {
+        if (prof) {
+          CP = prof;
+          if (prof.is_first_login) {
+            if (typeof showChpwModal === 'function') showChpwModal(true);
+          } else {
+            if (typeof initApp === 'function') initApp();
+          }
+        }
+      });
     }
   });
 }
 
-// ── INIT ──
-wireButtons();
-sb.auth.getSession().then(({data:{session}})=>{
-  if(session){
-    CU=session.user;
-    sb.from('profiles').select('*').eq('id',CU.id).single().then(({data:prof})=>{
-      if(prof){CP=prof;if(prof.is_first_login)showChpwModal(true);else initApp();}
-    });
-  }
-});
-</main> </script>
+</script>
+
+</main> 
+
 </body>
 </html>
