@@ -547,32 +547,104 @@ function confirm(msg, icon='⚠️') {
   });
 }
 
-// ══ AUTH ══
+// ==== AUTH ====
+
 async function doLogin() {
-  const email = document.getElementById('login-email').value.trim();
-  const pass  = document.getElementById('login-pass').value;
-  const btn   = document.getElementById('btn-login');
-  const err   = document.getElementById('login-error');
-  err.style.display = 'none';
-  btn.disabled = true;
-  btn.textContent = 'جاري تسجيل الدخول...';
+    const email = document.getElementById('login-email').value.trim();
+    const pass = document.getElementById('login-pass').value;
+    const btn = document.getElementById('btn-login');
+    const err = document.getElementById('login-error');
 
-  const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
-  btn.disabled = false;
-  btn.textContent = 'تسجيل الدخول';
+    err.style.display = 'none';
+    btn.disabled = true;
+    btn.textContent = 'جاري تسجيل الدخول';
 
-  if (error) { err.style.display='block'; return; }
+    try {
+        // 1. تسجيل الدخول
+        const { data, error } = await sb.auth.signInWithPassword({
+            email: email,
+            password: pass
+        });
 
-  CURRENT_USER = data.user;
-  const { data: profile } = await sb.from('profiles').select('*').eq('id', CURRENT_USER.id).single();
-  CURRENT_PROFILE = profile;
+        if (error) {
+            btn.disabled = false;
+            btn.textContent = 'تسجيل الدخول';
+            err.style.display = 'block';
+            err.textContent = error.message;
+            return;
+        }
 
-  if (profile.is_first_login) {
-    showChangePasswordModal(true);
-  } else {
-    initApp();
-  }
+        CURRENT_USER = data.user;
+        
+        // 2. محاولة جلب الملف الشخصي - استخدام maybeSingle بدلاً من single
+        const { data: profile, error: profileError } = await sb
+            .from('profiles')
+            .select('*')
+            .eq('id', CURRENT_USER.id)
+            .maybeSingle();  // مهم: maybeSingle ترجع null بدلاً من خطأ إذا لم يوجد بيانات
+
+        if (profileError) {
+            console.error('خطأ في جلب الملف الشخصي:', profileError);
+            btn.disabled = false;
+            btn.textContent = 'تسجيل الدخول';
+            err.style.display = 'block';
+            err.textContent = 'حدث خطأ في جلب البيانات';
+            return;
+        }
+
+        // 3. التحقق: هل يوجد ملف شخصي؟
+        if (!profile) {
+            // لا يوجد ملف شخصي - نقوم بإنشاء واحد جديد
+            console.log('إنشاء ملف شخصي جديد للمستخدم:', CURRENT_USER.id);
+            
+            const { data: newProfile, error: insertError } = await sb
+                .from('profiles')
+                .insert([
+                    { 
+                        id: CURRENT_USER.id, 
+                        email: CURRENT_USER.email,
+                        is_first_login: true,
+                        created_at: new Date().toISOString()
+                    }
+                ])
+                .select()
+                .maybeSingle();  // استخدام maybeSingle هنا أيضاً
+            
+            if (insertError) {
+                console.error('خطأ في إنشاء الملف الشخصي:', insertError);
+                btn.disabled = false;
+                btn.textContent = 'تسجيل الدخول';
+                err.style.display = 'block';
+                err.textContent = 'حدث خطأ في إنشاء الملف الشخصي: ' + insertError.message;
+                return;
+            }
+            
+            CURRENT_PROFILE = newProfile;
+            
+            // أول تسجيل دخول - توجيه لصفحة إعداد الملف الشخصي
+            window.location.href = '/onboarding.html';
+            return;
+        }
+        
+        // 4. يوجد ملف شخصي - نستخدمه
+        CURRENT_PROFILE = profile;
+        
+        // التوجيه حسب حالة أول تسجيل دخول
+        if (CURRENT_PROFILE.is_first_login === true) {
+            window.location.href = '/welcome.html';
+        } else {
+            window.location.href = '/dashboard.html';
+        }
+        
+    } catch (error) {
+        console.error('خطأ غير متوقع:', error);
+        btn.disabled = false;
+        btn.textContent = 'تسجيل الدخول';
+        err.style.display = 'block';
+        err.textContent = 'حدث خطأ غير متوقع: ' + error.message;
+    }
 }
+
 
 function showChangePasswordModal(isFirst=false) {
   const modal = document.getElementById('chpw-modal');
