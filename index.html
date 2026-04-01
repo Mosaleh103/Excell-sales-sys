@@ -547,8 +547,11 @@ function confirm(msg, icon='⚠️') {
   });
 }
 
-// ==== AUTH ====
+// ==== تعريف المتغيرات في أعلى الملف (خارج الدالة) ====
+let CURRENT_USER = null;
+let CURRENT_PROFILE = null;
 
+// ==== دالة تسجيل الدخول ====
 async function doLogin() {
     const email = document.getElementById('login-email').value.trim();
     const pass = document.getElementById('login-pass').value;
@@ -574,14 +577,16 @@ async function doLogin() {
             return;
         }
 
+        // 2. تخزين بيانات المستخدم
         CURRENT_USER = data.user;
-        
-        // 2. محاولة جلب الملف الشخصي - استخدام maybeSingle بدلاً من single
+        console.log('تم تسجيل الدخول بنجاح:', CURRENT_USER.email);
+
+        // 3. جلب الملف الشخصي
         const { data: profile, error: profileError } = await sb
             .from('profiles')
             .select('*')
             .eq('id', CURRENT_USER.id)
-            .maybeSingle();  // مهم: maybeSingle ترجع null بدلاً من خطأ إذا لم يوجد بيانات
+            .maybeSingle();
 
         if (profileError) {
             console.error('خطأ في جلب الملف الشخصي:', profileError);
@@ -592,23 +597,28 @@ async function doLogin() {
             return;
         }
 
-        // 3. التحقق: هل يوجد ملف شخصي؟
+        // 4. التحقق: هل يوجد ملف شخصي؟
         if (!profile) {
-            // لا يوجد ملف شخصي - نقوم بإنشاء واحد جديد
+            // لا يوجد ملف شخصي - نقوم بإنشاء واحد
             console.log('إنشاء ملف شخصي جديد للمستخدم:', CURRENT_USER.id);
+            
+            const username = CURRENT_USER.email.split('@')[0];
             
             const { data: newProfile, error: insertError } = await sb
                 .from('profiles')
                 .insert([
                     { 
-                        id: CURRENT_USER.id, 
+                        id: CURRENT_USER.id,
                         email: CURRENT_USER.email,
+                        username: username,
+                        fullname: '',
+                        role: 'user',
                         is_first_login: true,
                         created_at: new Date().toISOString()
                     }
                 ])
                 .select()
-                .maybeSingle();  // استخدام maybeSingle هنا أيضاً
+                .maybeSingle();
             
             if (insertError) {
                 console.error('خطأ في إنشاء الملف الشخصي:', insertError);
@@ -621,15 +631,16 @@ async function doLogin() {
             
             CURRENT_PROFILE = newProfile;
             
-            // أول تسجيل دخول - توجيه لصفحة إعداد الملف الشخصي
+            // توجيه لصفحة إعداد الملف الشخصي (أول مرة)
             window.location.href = '/onboarding.html';
             return;
         }
         
-        // 4. يوجد ملف شخصي - نستخدمه
+        // 5. يوجد ملف شخصي
         CURRENT_PROFILE = profile;
+        console.log('تم جلب الملف الشخصي:', CURRENT_PROFILE);
         
-        // التوجيه حسب حالة أول تسجيل دخول
+        // 6. التوجيه حسب حالة أول تسجيل دخول
         if (CURRENT_PROFILE.is_first_login === true) {
             window.location.href = '/welcome.html';
         } else {
@@ -644,46 +655,6 @@ async function doLogin() {
         err.textContent = 'حدث خطأ غير متوقع: ' + error.message;
     }
 }
-
-
-function showChangePasswordModal(isFirst=false) {
-  const modal = document.getElementById('chpw-modal');
-  const sub   = document.getElementById('chpw-sub');
-  modal.style.display = 'flex';
-  sub.textContent = isFirst
-    ? 'أول تسجيل دخول — يرجى تغيير كلمة المرور للمتابعة'
-    : 'تغيير كلمة المرور';
-}
-
-async function changePassword() {
-  const np = document.getElementById('chpw-new').value;
-  const nc = document.getElementById('chpw-confirm').value;
-  const err = document.getElementById('chpw-error');
-  err.style.display='none';
-
-  if (np.length < 8) { err.textContent='كلمة المرور يجب أن تكون 8 أحرف على الأقل'; err.style.display='block'; return; }
-  if (np !== nc)     { err.textContent='كلمتا المرور غير متطابقتين'; err.style.display='block'; return; }
-
-  const { error } = await sb.auth.updateUser({ password: np });
-  if (error) { err.textContent='خطأ: '+error.message; err.style.display='block'; return; }
-
-  await sb.from('profiles').update({ is_first_login: false }).eq('id', CURRENT_USER.id);
-  CURRENT_PROFILE.is_first_login = false;
-  document.getElementById('chpw-modal').style.display = 'none';
-  initApp();
-}
-
-async function doLogout() {
-  const ok = await confirm('هل تريد تسجيل الخروج؟', '👋');
-  if (!ok) return;
-  await sb.auth.signOut();
-  CURRENT_USER = null; CURRENT_PROFILE = null;
-  document.getElementById('app-screen').style.display = 'none';
-  document.getElementById('login-screen').style.display = 'flex';
-  document.getElementById('login-email').value = '';
-  document.getElementById('login-pass').value = '';
-}
-
 // ══ APP INIT ══
 function initApp() {
   document.getElementById('login-screen').style.display = 'none';
