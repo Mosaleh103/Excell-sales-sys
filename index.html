@@ -639,10 +639,31 @@ async function doLogin(){
   btn.disabled=false; btn.textContent='تسجيل الدخول';
   if(error){err.style.display='block';err.textContent='البريد أو كلمة المرور غير صحيحة';return;}
   CU=data.user;
-  const {data:prof}=await sb.from('profiles').select('*').eq('id',CU.id).single();
-  if(!prof){err.style.display='block';err.textContent='لم يتم العثور على بيانات المستخدم';return;}
-  CP=prof;
-  if(prof.is_first_login){showChpwModal(true);}else{initApp();}
+const { data: prof, error: profError } = await sb
+  .from('profiles')
+  .select('*')
+  .eq('id', CU.id)
+  .maybeSingle();
+
+if (profError) {
+  console.error(profError);
+  err.style.display = 'block';
+  err.textContent = 'خطأ في جلب بيانات المستخدم';
+  return;
+}
+
+if (!prof) {
+  err.style.display = 'block';
+  err.textContent = 'لم يتم العثور على بيانات المستخدم';
+  return;
+}
+
+CP = prof;
+
+if (prof.is_first_login) {
+  showChpwModal(true);
+} else {
+  initApp();
 }
 async function doLogout(){
   const ok=await confirm('هل تريد تسجيل الخروج؟','👋');
