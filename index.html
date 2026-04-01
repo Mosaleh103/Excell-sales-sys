@@ -665,6 +665,7 @@ if (prof.is_first_login) {
 } else {
   initApp();
 }
+}
 async function doLogout(){
   const ok=await confirm('هل تريد تسجيل الخروج؟','👋');
   if(!ok)return;
@@ -1609,6 +1610,6 @@ sb.auth.getSession().then(({data:{session}})=>{
     });
   }
 });
-</script>
+</main> </script>
 </body>
 </html>
