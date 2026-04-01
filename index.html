@@ -13,9 +13,9 @@ body{font-family:'Tajawal',sans-serif;background:var(--light);color:var(--text);
 
 /* LOGIN */
 .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--navy) 0%,var(--blue) 60%,var(--teal) 100%);}
-.login-box{background:white;border-radius:16px;padding:40px;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,0.3);}
+.login-box{background:white;border-radius:16px;padding:28px 32px;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,0.3);}
 .login-logo{text-align:center;margin-bottom:20px;display:flex;flex-direction:column;align-items:center;}
-.login-logo img{height:180px;object-fit:contain;}
+.login-logo img{height:100px;object-fit:contain;}
 .login-co{font-size:13px;font-weight:800;color:var(--navy);margin-top:8px;}
 .login-title{text-align:center;font-size:20px;font-weight:800;color:var(--navy);margin-bottom:4px;}
 .login-sub{text-align:center;font-size:12px;color:var(--muted);margin-bottom:24px;}
@@ -547,113 +547,47 @@ function confirm(msg, icon='⚠️') {
   });
 }
 
-// ==== تعريف المتغيرات في أعلى الملف (خارج الدالة) ====
-let CURRENT_USER = null;
-let CURRENT_PROFILE = null;
-
-// ==== دالة تسجيل الدخول ====
+// ══ LOGIN ══
 async function doLogin() {
-    const email = document.getElementById('login-email').value.trim();
-    const pass = document.getElementById('login-pass').value;
-    const btn = document.getElementById('btn-login');
-    const err = document.getElementById('login-error');
+  const email = document.getElementById('login-email').value.trim();
+  const pass  = document.getElementById('login-pass').value;
+  const btn   = document.getElementById('btn-login');
+  const err   = document.getElementById('login-error');
+  err.style.display = 'none';
+  if (!email || !pass) { err.style.display='block'; err.textContent='يرجى إدخال البريد الإلكتروني وكلمة المرور'; return; }
+  btn.disabled = true;
+  btn.textContent = 'جاري تسجيل الدخول...';
 
-    err.style.display = 'none';
-    btn.disabled = true;
-    btn.textContent = 'جاري تسجيل الدخول';
+  const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
 
-    try {
-        // 1. تسجيل الدخول
-        const { data, error } = await sb.auth.signInWithPassword({
-            email: email,
-            password: pass
-        });
+  if (error) {
+    btn.disabled = false;
+    btn.textContent = 'تسجيل الدخول';
+    err.style.display = 'block';
+    err.textContent = 'البريد الإلكتروني أو كلمة المرور غير صحيحة';
+    return;
+  }
 
-        if (error) {
-            btn.disabled = false;
-            btn.textContent = 'تسجيل الدخول';
-            err.style.display = 'block';
-            err.textContent = error.message;
-            return;
-        }
+  CURRENT_USER = data.user;
+  const { data: profile } = await sb.from('profiles').select('*').eq('id', CURRENT_USER.id).single();
 
-        // 2. تخزين بيانات المستخدم
-        CURRENT_USER = data.user;
-        console.log('تم تسجيل الدخول بنجاح:', CURRENT_USER.email);
+  if (!profile) {
+    btn.disabled = false;
+    btn.textContent = 'تسجيل الدخول';
+    err.style.display = 'block';
+    err.textContent = 'لم يتم العثور على بيانات المستخدم - تواصل مع المدير';
+    return;
+  }
 
-        // 3. جلب الملف الشخصي
-        const { data: profile, error: profileError } = await sb
-            .from('profiles')
-            .select('*')
-            .eq('id', CURRENT_USER.id)
-            .maybeSingle();
+  CURRENT_PROFILE = profile;
+  btn.disabled = false;
+  btn.textContent = 'تسجيل الدخول';
 
-        if (profileError) {
-            console.error('خطأ في جلب الملف الشخصي:', profileError);
-            btn.disabled = false;
-            btn.textContent = 'تسجيل الدخول';
-            err.style.display = 'block';
-            err.textContent = 'حدث خطأ في جلب البيانات';
-            return;
-        }
-
-        // 4. التحقق: هل يوجد ملف شخصي؟
-        if (!profile) {
-            // لا يوجد ملف شخصي - نقوم بإنشاء واحد
-            console.log('إنشاء ملف شخصي جديد للمستخدم:', CURRENT_USER.id);
-            
-            const username = CURRENT_USER.email.split('@')[0];
-            
-            const { data: newProfile, error: insertError } = await sb
-                .from('profiles')
-                .insert([
-                    { 
-                        id: CURRENT_USER.id,
-                        email: CURRENT_USER.email,
-                        username: username,
-                        fullname: '',
-                        role: 'user',
-                        is_first_login: true,
-                        created_at: new Date().toISOString()
-                    }
-                ])
-                .select()
-                .maybeSingle();
-            
-            if (insertError) {
-                console.error('خطأ في إنشاء الملف الشخصي:', insertError);
-                btn.disabled = false;
-                btn.textContent = 'تسجيل الدخول';
-                err.style.display = 'block';
-                err.textContent = 'حدث خطأ في إنشاء الملف الشخصي: ' + insertError.message;
-                return;
-            }
-            
-            CURRENT_PROFILE = newProfile;
-            
-            // توجيه لصفحة إعداد الملف الشخصي (أول مرة)
-            window.location.href = '/onboarding.html';
-            return;
-        }
-        
-        // 5. يوجد ملف شخصي
-        CURRENT_PROFILE = profile;
-        console.log('تم جلب الملف الشخصي:', CURRENT_PROFILE);
-        
-        // 6. التوجيه حسب حالة أول تسجيل دخول
-        if (CURRENT_PROFILE.is_first_login === true) {
-            window.location.href = '/welcome.html';
-        } else {
-            window.location.href = '/dashboard.html';
-        }
-        
-    } catch (error) {
-        console.error('خطأ غير متوقع:', error);
-        btn.disabled = false;
-        btn.textContent = 'تسجيل الدخول';
-        err.style.display = 'block';
-        err.textContent = 'حدث خطأ غير متوقع: ' + error.message;
-    }
+  if (profile.is_first_login) {
+    showChangePasswordModal(true);
+  } else {
+    initApp();
+  }
 }
 // ══ APP INIT ══
 function initApp() {
