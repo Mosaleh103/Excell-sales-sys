@@ -1584,7 +1584,7 @@ function wireButtons(){
   document.getElementById('btn-print-perf').addEventListener('click',()=>{document.getElementById('ph-sub').textContent='تقرير أداء — '+CP.fullname;window.print();});
   document.getElementById('btn-print-customers').addEventListener('click',()=>{document.getElementById('ph-sub').textContent='قائمة العملاء';window.print();});
   document.getElementById('btn-print-class').addEventListener('click',()=>{document.getElementById('ph-sub').textContent='تقرير تصنيف العملاء';window.print();});
-// السطر 1587 - أزرار الطباعة (تم تعديلها لتعمل بشكل آمن لا يسبب تجمد الصفحة)
+// السطر 1587 - أزرار الطباعة بشكل آمن
   const printMapping = {
     'btn-print-daily': 'مبيعات يوم ' + (document.getElementById('v-date')?.value || ''),
     'btn-print-plan': 'الخطة الشهرية',
@@ -1608,7 +1608,7 @@ function wireButtons(){
     }
   });
 
-  // مراقبة حالة تغيير كلمة المرور
+  // التحقق من وجود متغير sb قبل استخدامه لمراقبة حالة تغير كلمة المرور
   if (typeof sb !== 'undefined') {
     sb.auth.onAuthStateChange(async (event, session) => {
       if (event === 'PASSWORD_RECOVERY' && session) {
@@ -1625,27 +1625,36 @@ function wireButtons(){
   }
 }
 
-// ── 1. تشغيل تفعيل الأزرار ──
-wireButtons();
-
-// ── 2. التحقق من الجلسة عند تحميل الصفحة ──
-if (typeof sb !== 'undefined') {
-  sb.auth.getSession().then(({data:{session}}) => {
-    if (session) {
-      CU = session.user;
-      sb.from('profiles').select('*').eq('id', CU.id).single().then(({data:prof}) => {
-        if (prof) {
-          CP = prof;
-          if (prof.is_first_login) {
-            if (typeof showChpwModal === 'function') showChpwModal(true);
-          } else {
-            if (typeof initApp === 'function') initApp();
-          }
-        }
-      });
-    }
-  });
+// ── تشغيل تفعيل الأزرار ──
+try {
+    wireButtons();
+} catch (e) {
+    console.error("خطأ في تفعيل الأزرار:", e);
 }
+
+// ── التحقق من الجلسة (استخدام sb المباشر من النطاق العام) ──
+// ملاحظة: تأكد أن سطر const sb = ... موجود في أعلى السكربت
+setTimeout(() => {
+    if (typeof sb !== 'undefined') {
+        sb.auth.getSession().then(({data:{session}}) => {
+            if (session) {
+                CU = session.user;
+                sb.from('profiles').select('*').eq('id', CU.id).single().then(({data:prof}) => {
+                    if (prof) {
+                        CP = prof;
+                        if (prof.is_first_login) {
+                            if (typeof showChpwModal === 'function') showChpwModal(true);
+                        } else {
+                            if (typeof initApp === 'function') initApp();
+                        }
+                    }
+                });
+            }
+        });
+    } else {
+        console.error("خطأ: لم يتم العثور على متغير sb. تأكد من تعريفه في بداية السكربت.");
+    }
+}, 500); // تأخير بسيط لضمان تحميل المكتبات
 
 </script>
 
