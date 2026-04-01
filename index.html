@@ -1584,7 +1584,7 @@ function wireButtons(){
   document.getElementById('btn-print-perf').addEventListener('click',()=>{document.getElementById('ph-sub').textContent='تقرير أداء — '+CP.fullname;window.print();});
   document.getElementById('btn-print-customers').addEventListener('click',()=>{document.getElementById('ph-sub').textContent='قائمة العملاء';window.print();});
   document.getElementById('btn-print-class').addEventListener('click',()=>{document.getElementById('ph-sub').textContent='تقرير تصنيف العملاء';window.print();});
-// السطر 1587 - أزرار الطباعة (تعديل آمن)
+// السطر 1587 - أزرار الطباعة بشكل آمن
   const printMapping = {
     'btn-print-daily': 'مبيعات يوم ' + (document.getElementById('v-date')?.value || ''),
     'btn-print-plan': 'الخطة الشهرية',
@@ -1608,9 +1608,8 @@ function wireButtons(){
     }
   });
 
-  // محاولة الوصول لـ sb بشكل آمن داخل الدالة
-  const _sb = (typeof sb !== 'undefined') ? sb : (window.sb || null);
-
+  // التأكد من وجود sb قبل مراقبة حالة كلمة المرور
+  const _sb = window.sb || (typeof sb !== 'undefined' ? sb : null);
   if (_sb) {
     _sb.auth.onAuthStateChange(async (event, session) => {
       if (event === 'PASSWORD_RECOVERY' && session) {
@@ -1627,36 +1626,36 @@ function wireButtons(){
   }
 }
 
-// ── 1. تشغيل تفعيل الأزرار ──
-try {
-    wireButtons();
-} catch (e) {
-    console.error("فشل تفعيل الأزرار:", e);
+// ── تشغيل التطبيق (النهائي والمضمون) ──
+function bootApp() {
+  const _sb = window.sb || (typeof sb !== 'undefined' ? sb : null);
+  
+  if (!_sb) {
+    console.warn("تنبيه: يتم الآن محاولة استعادة الاتصال بـ Supabase...");
+    return; // سيحاول التشغيل مرة أخرى عبر الـ Event Listener بالأسفل
+  }
+
+  wireButtons();
+  _sb.auth.getSession().then(({data:{session}}) => {
+    if (session) {
+      CU = session.user;
+      _sb.from('profiles').select('*').eq('id', CU.id).single().then(({data:prof}) => {
+        if (prof) {
+          CP = prof;
+          if (prof.is_first_login) {
+             if (typeof showChpwModal === 'function') showChpwModal(true);
+          } else {
+             if (typeof initApp === 'function') initApp();
+          }
+        }
+      });
+    }
+  });
 }
 
-// ── 2. التحقق من الجلسة عند التحميل ──
-setTimeout(() => {
-    const _sb = (typeof sb !== 'undefined') ? sb : (window.sb || null);
-    if (_sb) {
-        _sb.auth.getSession().then(({data:{session}}) => {
-            if (session) {
-                CU = session.user;
-                _sb.from('profiles').select('*').eq('id', CU.id).single().then(({data:prof}) => {
-                    if (prof) {
-                        CP = prof;
-                        if (prof.is_first_login) {
-                            if (typeof showChpwModal === 'function') showChpwModal(true);
-                        } else {
-                            if (typeof initApp === 'function') initApp();
-                        }
-                    }
-                });
-            }
-        });
-    } else {
-        console.error("Critical Error: Supabase client (sb) is not defined in any scope.");
-    }
-}, 300);
+// الانتظار حتى تحميل الصفحة بالكامل لضمان تعريف sb في كل مكان
+window.addEventListener('DOMContentLoaded', bootApp);
+window.addEventListener('load', bootApp);
 
 </script>
 
