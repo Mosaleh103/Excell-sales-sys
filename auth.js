@@ -201,7 +201,17 @@ function buildMenubar(){
       e.stopPropagation();
       const isOpen=dd.classList.contains('open');
       closeDds();
-      if(!isOpen){ dd.classList.add('open'); btn.classList.add('open'); }
+      if(!isOpen){
+        // Calculate position using fixed coordinates — RTL-safe, no overflow issues
+        const rect=btn.getBoundingClientRect();
+        dd.style.top=(rect.bottom+2)+'px';
+        // Align right edge of dropdown to right edge of button (natural in RTL)
+        const rightEdge=window.innerWidth-rect.right;
+        dd.style.right=rightEdge+'px';
+        dd.style.left='auto';
+        dd.classList.add('open');
+        btn.classList.add('open');
+      }
     });
 
     div.appendChild(btn);
