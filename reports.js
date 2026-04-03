@@ -69,10 +69,10 @@ async function loadPlan(){
   const tfoot=document.getElementById('plan-tfoot');
 
   let h1=`<tr><th style="min-width:160px;text-align:right;background:var(--blue);">المنتج</th>`;
-  clients.forEach(c=>{h1+=`<th colspan="3" style="background:var(--teal);">${c.name}</th>`;});
-  h1+=`<th style="background:var(--teal);">الإجمالي</th></tr>`;
-  let h2='<tr>';
-  clients.forEach(()=>{h2+='<th style="background:#1e4976;font-size:10px;">السعر</th><th style="background:#1e4976;font-size:10px;">الكمية</th><th style="background:#1e4976;font-size:10px;">الإجمالي</th>';});
+  clients.forEach(c=>{h1+=`<th colspan="3" style="background:var(--grad-card-hd);">${c.name}</th>`;});
+  h1+=`<th style="background:var(--grad-card-hd);">الإجمالي</th></tr>`;
+  let h2='<tr><th class="th-sub"></th>';
+  clients.forEach(()=>{h2+='<th class="th-sub">السعر</th><th class="th-sub">الكمية</th><th class="th-sub">الإجمالي</th>';});
   h2+='</tr>';
   thead.innerHTML=h1+h2;
 
@@ -161,11 +161,11 @@ async function loadWeekly(){
   const tfoot=document.getElementById('wk-tfoot');
 
   let h1=`<tr><th style="min-width:140px;text-align:right;background:var(--blue);">المنتج</th>`;
-  clients.forEach(c=>{h1+=`<th colspan="2" style="background:var(--teal);">${c.name}</th>`;});
-  h1+=`<th style="background:var(--teal);">المجموع</th><th style="background:var(--green);">% إنجاز</th></tr>`;
-  let h2='<tr>';
-  clients.forEach(()=>{h2+='<th style="background:#1e4976;font-size:10px;">المستهدف</th><th style="background:#166534;font-size:10px;">المحقق ✓</th>';});
-  h2+='</tr>';
+  clients.forEach(c=>{h1+=`<th colspan="2" style="background:var(--grad-card-hd);">${c.name}</th>`;});
+  h1+=`<th style="background:var(--grad-card-hd);">المجموع</th><th style="background:var(--grad-card-hd);">% إنجاز</th></tr>`;
+  let h2='<tr><th class="th-sub" style="min-width:140px;"></th>';
+  clients.forEach(()=>{h2+='<th class="th-sub">المستهدف</th><th class="th-sub">المحقق ✓</th>';});
+  h2+='<th class="th-sub"></th><th class="th-sub"></th></tr>';
   thead.innerHTML=h1+h2;
 
   let rows='';let gTgt=0,gDone=0;
@@ -302,7 +302,7 @@ async function renderAgentDetail(agent,allSales,allPlans){
   const unvisited=(custs||[]).filter(c=>!visitedIds.has(c.id));
   const col=pct>=100?'var(--green)':pct>=70?'var(--amber)':'var(--red)';
 
-  report.innerHTML=`<div class="card"><div class="card-head"><h2>📊 ${agent.fullname}</h2><button class="btn bt btn-sm" id="btn-print-agent">🖨️ طباعة</button></div><div class="card-body">
+  report.innerHTML=`<div class="card"><div class="card-head rpt"><h2>📊 ${agent.fullname}</h2><button class="btn b-report btn-sm" id="btn-print-agent">🖨️ طباعة</button></div><div class="card-body">
     <div class="kpi-grid">${kpi('المبيعات',fmtNum(totalSales)+' ر.س','','teal')}${kpi('المستهدف',fmtNum(totalTarget)+' ر.س','','blue')}${kpi('الإنجاز',pct+'%','',pct>=100?'green':pct>=70?'amber':'red')}${kpi('مزار',visitedIds.size+'/'+(custs||[]).length,'','green')}${kpi('غير مزار',unvisited.length,'',unvisited.length===0?'green':'red')}</div>
     <div style="margin:10px 0;"><div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;color:var(--navy);margin-bottom:3px;"><span>تقدم الإنجاز</span><span style="color:${col};">${pct}%</span></div><div class="pb" style="height:10px;"><div class="pf" style="width:${Math.min(pct,100)}%;background:${col};"></div></div></div>
     ${unvisited.length?`<div class="alert al-amb"><span>⚠️</span><div><strong>غير مزارين:</strong> ${unvisited.map(c=>c.name).join('، ')}</div></div>`:''}
