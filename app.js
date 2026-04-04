@@ -1,6 +1,7 @@
 // ── STATE ── (global, available to all modules)
 let CU = null;   // Current User (Supabase Auth)
 let CP = null;   // Current Profile (DB)
+let PERMS = {};  // Loaded by permissions.js at login
 let allProducts = [];
 let allCustomers = [];
 let allProfiles = [];
