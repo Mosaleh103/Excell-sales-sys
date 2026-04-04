@@ -1,6 +1,6 @@
 // ── USERS / AGENTS ──
 async function loadUsers(){
-  if(CP.role!=='manager')return;
+  if(!canView('users'))return;
   const {data}=await sb.from('profiles').select('*').order('created_at');
   const tbody=document.getElementById('users-body');
   tbody.innerHTML='';
