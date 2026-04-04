@@ -174,7 +174,7 @@ body { font-family: 'Tajawal', sans-serif; background: var(--bg-page); color: va
 
 /* ── PAGES ── */
 .page { display:none; padding:20px 24px; max-width:1440px; margin:0 auto; }
-.page.active { display:block; }
+.page.active { display:block; min-height:calc(100vh - 120px); }
 
 /* ── CARDS ── */
 .card { background:white; border-radius:var(--r-lg); box-shadow:var(--shadow-xs); margin-bottom:16px; overflow:hidden; border:1px solid var(--border); transition:box-shadow var(--tr-normal); }
@@ -584,3 +584,4 @@ body { font-family: 'Tajawal', sans-serif; background: var(--bg-page); color: va
   .perm-sidebar { border-left: none; border-bottom: 1px solid var(--border); }
   .perm-user-list { max-height: 200px; }
 }
+#app { min-height:100vh; }
