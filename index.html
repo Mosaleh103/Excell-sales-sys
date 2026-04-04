@@ -1,116 +1,424 @@
-// ── CUSTOMERS ──
-async function loadCustomers(search=''){
-  st('جاري تحميل العملاء...','loading');
-  let q=sb.from('customers').select('*,profiles!assigned_agent_id(fullname)').eq('is_active',true).order('name');
-  if(CP.role!=='manager') q=q.eq('assigned_agent_id',CP.id);
-  if(search) q=q.ilike('name','%'+search+'%');
-  const {data}=await q;
-  const tbody=document.getElementById('customers-body');
-  tbody.innerHTML='';
-  if(!(data||[]).length){tbody.innerHTML='<tr><td colspan="7" class="empty-state"><div class="ei">👥</div>لا يوجد عملاء</td></tr>';st('جاهز');return;}
-  (data||[]).forEach(c=>{
-    const abc=c.final_classification||c.manual_classification||'BB';
-    const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${c.account_no}</td><td style="text-align:right;font-weight:700;">${c.name}</td><td>${c.profiles?.fullname||'—'}</td><td>${abcBadge(abc)}</td><td>${c.monthly_target>0?fmtNum(c.monthly_target)+' ر.س':'—'}</td><td>${badge(c.is_active?'نشط':'موقوف',c.is_active?'bg-green':'bg-red')}</td><td class="no-print" style="white-space:nowrap;"><button class="btn bp btn-sm edit-cust" data-id="${c.id}" style="margin-left:4px;">✏️</button><button class="btn br btn-sm del-cust" data-id="${c.id}" data-name="${c.name}">🗑</button></td>`;
-    tr.querySelector('.edit-cust').addEventListener('click',()=>editCustomer(c));
-    tr.querySelector('.del-cust').addEventListener('click',()=>deleteCustomer(c.id,c.name));
-    tbody.appendChild(tr);
-  });
-  st('جاهز');
-}
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Excell CRM - رحلة الامتياز</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
 
-function loadAgentSelect(){
-  const sel=document.getElementById('cf-agent');
-  sel.innerHTML='<option value="">-- اختر المندوب --</option>';
-  allProfiles.filter(p=>p.role==='agent').forEach(p=>{sel.innerHTML+=`<option value="${p.id}">${p.fullname}</option>`;});
-}
+<!-- CONFIRM -->
+<div class="confirm-overlay" id="confirm-overlay">
+  <div class="confirm-box">
+    <div class="confirm-icon" id="ci">⚠️</div>
+    <div class="confirm-title" id="ct">تأكيد</div>
+    <div class="confirm-msg" id="cm"></div>
+    <div class="confirm-btns">
+      <button class="btn br" id="cy">تأكيد</button>
+      <button class="btn bp" id="cn">إلغاء</button>
+    </div>
+  </div>
+</div>
 
-function clearCustomerForm(){
-  ['cf-id','cf-account','cf-name','cf-phone','cf-address','cf-notes'].forEach(id=>{document.getElementById(id).value='';});
-  document.getElementById('cf-class').value='BB';
-  document.getElementById('cf-target').value='';
-  document.getElementById('cf-agent').value='';
-  document.getElementById('cform-title').textContent='👤 عميل جديد';
-}
+<!-- CHANGE PASSWORD MODAL -->
+<div class="modal-overlay" id="chpw-overlay">
+  <div class="modal-box">
+    <div class="modal-title">🔐 تغيير كلمة المرور</div>
+    <div class="modal-sub" id="chpw-sub">أول تسجيل دخول — يرجى تغيير كلمة المرور</div>
+    <div class="lf">
+      <label>كلمة المرور الجديدة</label>
+      <div class="pw-wrap"><input type="password" id="chpw-new" placeholder="8 أحرف على الأقل"><button class="pw-eye" data-t="chpw-new">👁️</button></div>
+    </div>
+    <div class="lf">
+      <label>تأكيد كلمة المرور</label>
+      <div class="pw-wrap"><input type="password" id="chpw-confirm" placeholder="أعد كتابة كلمة المرور"><button class="pw-eye" data-t="chpw-confirm">👁️</button></div>
+    </div>
+    <div class="login-err" id="chpw-err"></div>
+    <button class="login-btn" id="btn-chpw" style="margin-top:8px;">حفظ كلمة المرور الجديدة</button>
+  </div>
+</div>
 
-function editCustomer(c){
-  document.getElementById('cf-id').value=c.id;
-  document.getElementById('cf-account').value=c.account_no;
-  document.getElementById('cf-name').value=c.name;
-  document.getElementById('cf-phone').value=c.phone||'';
-  document.getElementById('cf-address').value=c.address||'';
-  document.getElementById('cf-class').value=c.manual_classification||'BB';
-  document.getElementById('cf-target').value=c.monthly_target||'';
-  document.getElementById('cf-notes').value=c.notes||'';
-  document.getElementById('cf-agent').value=c.assigned_agent_id||'';
-  document.getElementById('cform-title').textContent='✏️ تعديل عميل: '+c.name;
-  showPage('customer-form');
-}
+<!-- LOGIN -->
+<div id="login-screen" class="login-wrap">
+  <div class="login-box">
+    <div class="login-logo">
+      <img src="logo.png" alt="Excell">
+      <div class="login-co">شركة رحلة الامتياز للتجارة</div>
+    </div>
+    <div class="login-title">نظام متابعة المبيعات</div>
+    <div class="login-sub">Sales Management System</div>
+    <div class="lf"><label>البريد الإلكتروني</label><input type="email" id="li-email" placeholder="example@email.com" autocomplete="email"></div>
+    <div class="lf"><label>كلمة المرور</label>
+      <div class="pw-wrap"><input type="password" id="li-pass" placeholder="كلمة المرور" autocomplete="current-password"><button class="pw-eye" data-t="li-pass">👁️</button></div>
+    </div>
+    <button class="login-btn" id="btn-login">تسجيل الدخول</button>
+    <div class="login-err" id="li-err"></div>
+    <button class="forgot-link" id="btn-forgot">نسيت كلمة المرور؟</button>
+    <div class="forgot-box" id="forgot-box">
+      <div class="lf"><label>البريد الإلكتروني</label><input type="email" id="forgot-email" placeholder="أدخل بريدك"></div>
+      <button class="login-btn" id="btn-reset" style="background:var(--teal);">إرسال رابط إعادة التعيين</button>
+      <div class="login-err" id="reset-msg" style="display:none;"></div>
+    </div>
+  </div>
+</div>
 
-async function saveCustomer(){
-  const id=document.getElementById('cf-id').value;
-  const acc=document.getElementById('cf-account').value.trim();
-  const name=document.getElementById('cf-name').value.trim();
-  if(!acc||!name){alert('رقم الحساب والاسم مطلوبان');return;}
-  const data={account_no:acc,name,phone:document.getElementById('cf-phone').value,address:document.getElementById('cf-address').value,manual_classification:document.getElementById('cf-class').value,monthly_target:parseFloat(document.getElementById('cf-target').value)||0,notes:document.getElementById('cf-notes').value,assigned_agent_id:document.getElementById('cf-agent').value||null};
-  st('جاري الحفظ...','loading');
-  if(id){await sb.from('customers').update(data).eq('id',id);}
-  else{await sb.from('customers').insert(data);}
-  await loadMasterData();
-  st('تم حفظ العميل ✓');
-  showPage('customers');
-}
+<!-- WELCOME PAGE (after login) -->
+<div id="page-welcome">
+  <div class="wlc-shape"></div>
+  <div class="wlc-shape"></div>
+  <div class="wlc-shape"></div>
+  <div class="wlc-shape"></div>
+  <div class="wlc-shape"></div>
+  <div class="wlc-inner">
+    <div class="wlc-title"><img src="white_logo.png" alt="Excell" class="wlc-logo-img"></div>
+    <div class="wlc-sub">شركة رحلة الامتياز للتجارة</div>
+    <div class="wlc-divider"></div>
+    <div class="wlc-name" id="wlc-username" style="display:none"></div>
+    <div class="wlc-apps" id="wlc-apps"></div>
+  </div>
+</div>
 
-async function deleteCustomer(id,name){
-  const ok=await confirm(`حذف العميل "${name}"؟ لن يتم حذف بياناته التاريخية.`,'🗑️');
-  if(!ok)return;
-  await sb.from('customers').update({is_active:false}).eq('id',id);
-  await loadMasterData();
-  loadCustomers();
-  st('تم الحذف ✓');
-}
+<!-- APP -->
+<div id="app" style="display:none;">
+  <div class="menubar">
+    <div class="mb-brand">
+      <img src="logo.png" alt="Excell">
+      <div class="mb-brand-text"><span class="t1">Excell CRM</span><span class="t2">رحلة الامتياز</span></div>
+    </div>
+    <div class="mb-menus" id="mb-menus"></div>
+    <div class="mb-user">
+      <span class="ub" id="nav-name"></span>
+      <span class="rb" id="nav-role"></span>
+      <button class="logout-btn" id="btn-logout">خروج</button>
+    </div>
+  </div>
+  <div class="statusbar"><span class="sdot" id="sdot"></span><span id="smsg">جاهز</span></div>
 
-// ── CLASSIFICATION REPORT ──
-async function loadClassReport(){
-  st('جاري تحميل تقرير التصنيف...','loading');
-  let q=sb.from('customers').select('*,profiles!assigned_agent_id(fullname)').eq('is_active',true).order('final_classification');
-  if(CP.role!=='manager') q=q.eq('assigned_agent_id',CP.id);
-  const {data}=await q;
-  ['AA','AB','BA','BB'].forEach(c=>{document.getElementById('cnt-'+c).textContent=(data||[]).filter(d=>(d.final_classification||d.manual_classification||'BB')===c).length;});
-  const tbody=document.getElementById('class-body');
-  tbody.innerHTML='';
-  (data||[]).forEach(c=>{
-    const abc=c.final_classification||c.manual_classification||'BB';
-    const tr=document.createElement('tr');
-    tr.innerHTML=`<td style="text-align:right;font-weight:700;">${c.name}</td><td>${c.profiles?.fullname||'—'}</td><td>${abcBadge(abc)}</td><td>—</td><td>—</td><td>—</td>`;
-    tbody.appendChild(tr);
-  });
-  st('جاهز');
-}
+  <div class="print-header" id="ph">
+    <img src="logo.png" alt="Excell">
+    <h2>شركة رحلة الامتياز للتجارة</h2>
+    <p id="ph-sub">تقرير</p>
+  </div>
 
-// ── UNVISITED CUSTOMERS ──
-async function loadUnvisited(){
-  st('جاري البحث...','loading');
-  const days=parseInt(document.getElementById('unvisited-days').value)||7;
-  const cutoff=new Date();cutoff.setDate(cutoff.getDate()-days);
-  const cutoffStr=cutoff.toISOString().split('T')[0];
-  let q=sb.from('customers').select('*,profiles!assigned_agent_id(fullname)').eq('is_active',true);
-  if(CP.role!=='manager') q=q.eq('assigned_agent_id',CP.id);
-  const {data:custs}=await q;
-  const {data:visits}=await sb.from('daily_visits').select('customer_id,visit_date').gte('visit_date',cutoffStr);
-  const recentIds=new Set((visits||[]).map(v=>v.customer_id).filter(Boolean));
-  const unvisited=(custs||[]).filter(c=>!recentIds.has(c.id));
-  const {data:lastVisits}=await sb.from('daily_visits').select('customer_id,visit_date,next_visit_date').order('visit_date',{ascending:false});
-  const lastMap={};(lastVisits||[]).forEach(v=>{if(!lastMap[v.customer_id])lastMap[v.customer_id]=v;});
-  const tbody=document.getElementById('unvisited-body');
-  tbody.innerHTML='';
-  if(!unvisited.length){tbody.innerHTML=`<tr><td colspan="5" class="empty-state"><div class="ei">✅</div>جميع العملاء تمت زيارتهم خلال ${days} أيام</td></tr>`;}
-  else{unvisited.forEach(c=>{
-    const lv=lastMap[c.id];
-    const daysSince=lv?Math.floor((new Date()-new Date(lv.visit_date))/86400000):999;
-    const tr=document.createElement('tr');
-    tr.innerHTML=`<td style="text-align:right;font-weight:700;">${c.name}</td><td>${c.profiles?.fullname||'—'}</td><td style="font-size:11px;">${lv?.visit_date||'لم تتم زيارة'}</td><td><span class="badge ${daysSince>30?'bg-red':'bg-amber'}">${daysSince===999?'لم تتم':daysSince+' يوم'}</span></td><td style="font-size:11px;">${lv?.next_visit_date||'—'}</td>`;
-    tbody.appendChild(tr);
-  });}
-  st('جاهز');
-}
+  <!-- ═══ PAGES ═══ -->
+
+  <!-- DASHBOARD -->
+  <div class="page" id="page-dashboard">
+    <div class="mbar"><label>📊 لوحة التحكم الرئيسية</label>
+      <input type="month" id="dash-month" style="margin-right:auto;">
+      <button class="btn bt btn-sm" id="btn-dash-refresh">🔄 تحديث</button>
+    </div>
+    <div class="kpi-grid" id="dash-kpis"></div>
+    <div id="dash-alerts"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;" id="dash-charts-wrap">
+      <div class="card" style="overflow:visible;"><div class="card-head"><h2>🏆 ترتيب المناديب</h2></div>
+        <div class="card-body" style="padding:0; min-height:600px;"><table class="tbl"><thead><tr><th>#</th><th>المندوب</th><th>المبيعات</th><th>الإنجاز</th></tr></thead><tbody id="agents-rank"></tbody></table></div>
+      </div>
+      <div class="card"><div class="card-head"><h2>📦 أكثر المنتجات حركة</h2></div>
+        <div class="card-body" style="padding:0;"><table class="tbl"><thead><tr><th>#</th><th>المنتج</th><th>الكمية</th><th>القيمة</th></tr></thead><tbody id="top-products"></tbody></table></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SALES - DAILY VISIT -->
+  <div class="page" id="page-visit">
+    <div class="mbar">
+      <label>📝 تسجيل زيارة / مبيعة</label>
+      <input type="date" id="v-date">
+      <button class="btn bt btn-sm" id="btn-print-daily" style="margin-right:auto;">🖨️ طباعة</button>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>👤 بيانات الزيارة</h2></div>
+      <div class="card-body">
+        <div class="fg">
+          <div class="ff"><label>العميل</label>
+            <select id="v-customer"><option value="">-- اختر العميل --</option><option value="__new__">+ عميل جديد</option></select>
+            <input type="text" id="v-customer-new" placeholder="اسم العميل الجديد" style="display:none;margin-top:6px;">
+          </div>
+          <div class="ff"><label>نوع الزيارة</label>
+            <select id="v-type">
+              <option value="sale">بيع</option>
+              <option value="no_sale">زيارة بدون بيع</option>
+              <option value="follow_up">متابعة</option>
+              <option value="new_customer">عميل جديد</option>
+            </select>
+          </div>
+          <div class="ff"><label>موعد الزيارة القادمة</label><input type="date" id="v-next"></div>
+          <div class="ff full"><label>ملاحظات الزيارة</label><input type="text" id="v-notes" placeholder="سبب عدم الشراء، متطلبات العميل..."></div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>🛒 الأصناف المباعة</h2>
+        <button class="btn bg btn-sm" id="btn-add-item">+ إضافة صنف</button>
+      </div>
+      <div class="card-body" style="padding:8px;">
+        <div class="twrap">
+          <table class="items-table">
+            <thead><tr><th>الصنف</th><th style="width:120px">لوت نمبر*</th><th style="width:80px">الكمية</th><th style="width:90px">السعر</th><th style="width:80px">الإجمالي</th><th style="width:40px"></th></tr></thead>
+            <tbody id="sale-items-body"></tbody>
+            <tfoot><tr><td colspan="4" style="text-align:right;padding:8px;font-weight:700;color:var(--navy);">الإجمالي الكلي</td><td id="items-total" style="font-size:14px;font-weight:900;color:var(--green);padding:8px;"></td><td></td></tr></tfoot>
+          </table>
+        </div>
+        <div class="btn-row">
+          <button class="btn bg" id="btn-save-visit">✔ حفظ الزيارة</button>
+          <button class="btn bp" id="btn-clear-visit">🗑 مسح</button>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>📋 زيارات اليوم</h2><span id="today-total" style="background:rgba(255,255,255,0.2);padding:3px 10px;border-radius:20px;font-size:12px;"></span></div>
+      <div class="card-body" style="padding:0;"><table class="tbl"><thead><tr><th>العميل</th><th>النوع</th><th>الإجمالي</th><th>ملاحظات</th><th class="no-print">حذف</th></tr></thead><tbody id="today-visits"></tbody></table></div>
+    </div>
+  </div>
+
+  <!-- SALES - MONTHLY PLAN -->
+  <div class="page" id="page-plan">
+    <div class="mbar"><label>📋 الخطة الشهرية</label>
+      <span id="plan-info" style="font-size:12px;color:var(--teal);font-weight:700;"></span>
+      <button class="btn bt btn-sm" id="btn-print-plan" style="margin-right:auto;">🖨️ طباعة</button>
+    </div>
+    <div class="card"><div class="card-body" style="padding:8px;">
+      <div class="twrap"><table class="tbl"><thead id="plan-thead"></thead><tbody id="plan-tbody"></tbody><tfoot id="plan-tfoot"></tfoot></table></div>
+    </div></div>
+  </div>
+
+  <!-- SALES - WEEKLY -->
+  <div class="page" id="page-weekly">
+    <div class="mbar"><label>📅 المتابعة الأسبوعية</label>
+      <button class="btn bt btn-sm" id="btn-print-weekly" style="margin-right:auto;">🖨️ طباعة</button>
+    </div>
+    <div class="wtabs">
+      <button class="wtab active" data-w="1">الأسبوع الأول</button>
+      <button class="wtab" data-w="2">الأسبوع الثاني</button>
+      <button class="wtab" data-w="3">الأسبوع الثالث</button>
+      <button class="wtab" data-w="4">الأسبوع الرابع</button>
+    </div>
+    <div class="card"><div class="card-body" style="padding:8px;">
+      <div class="twrap"><table class="tbl"><thead id="wk-thead"></thead><tbody id="wk-tbody"></tbody><tfoot id="wk-tfoot"></tfoot></table></div>
+    </div></div>
+  </div>
+
+  <!-- SALES - MY PERFORMANCE -->
+  <div class="page" id="page-perf">
+    <div class="mbar"><label>📊 تقييم أدائي</label>
+      <input type="month" id="perf-month" style="margin-right:auto;">
+      <button class="btn bp btn-sm" id="btn-perf-refresh">🔄 تحديث</button>
+      <button class="btn bt btn-sm" id="btn-print-perf">🖨️ طباعة</button>
+    </div>
+    <div class="kpi-grid" id="perf-kpis"></div>
+    <div id="perf-alerts"></div>
+    <div class="card"><div class="card-head"><h2>📈 أداء العملاء</h2></div>
+      <div class="card-body" style="padding:0; min-height:600px;"><table class="tbl"><thead><tr><th>العميل</th><th>التصنيف</th><th>المستهدف</th><th>المحقق</th><th>آخر زيارة</th><th>الحالة</th></tr></thead><tbody id="perf-clients"></tbody></table></div>
+    </div>
+  </div>
+
+  <!-- CUSTOMERS - LIST -->
+  <div class="page" id="page-customers">
+    <div class="mbar"><label>👥 العملاء</label>
+      <div class="search-wrap" style="margin-bottom:0;flex:1;max-width:300px;margin-right:auto;">
+        <input type="text" id="cust-search" placeholder="بحث باسم العميل أو رقم الحساب...">
+        <span class="search-icon">🔍</span>
+      </div>
+      <button class="btn bg btn-sm" id="btn-new-customer">+ عميل جديد</button>
+      <button class="btn bt btn-sm" id="btn-print-customers">🖨️ طباعة</button>
+    </div>
+    <div class="card"><div class="card-body" style="padding:0;">
+      <table class="tbl"><thead><tr><th>رقم الحساب</th><th>اسم العميل</th><th>المندوب</th><th>التصنيف</th><th>المستهدف</th><th>الحالة</th><th class="no-print">إجراءات</th></tr></thead>
+      <tbody id="customers-body"></tbody></table>
+    </div></div>
+  </div>
+
+  <!-- CUSTOMERS - NEW/EDIT -->
+  <div class="page" id="page-customer-form">
+    <div class="mbar"><label id="cform-title">👤 عميل جديد</label>
+      <button class="btn bp btn-sm" id="btn-back-customers" style="margin-right:auto;">← رجوع</button>
+    </div>
+    <div class="card"><div class="card-head"><h2>📋 بيانات العميل</h2></div>
+      <div class="card-body">
+        <div class="fg">
+          <div class="ff"><label>رقم الحساب *</label><input type="text" id="cf-account" placeholder="مثال: C001"></div>
+          <div class="ff"><label>اسم العميل *</label><input type="text" id="cf-name" placeholder="اسم العميل الكامل"></div>
+          <div class="ff"><label>رقم الهاتف</label><input type="text" id="cf-phone" placeholder="05xxxxxxxx"></div>
+          <div class="ff"><label>العنوان</label><input type="text" id="cf-address" placeholder="المدينة - الحي"></div>
+          <div class="ff"><label>المندوب المسؤول</label><select id="cf-agent"><option value="">-- اختر المندوب --</option></select></div>
+          <div class="ff"><label>التصنيف المبدئي</label>
+            <select id="cf-class"><option value="BB">BB - عادي</option><option value="BA">BA - جيد المبيعات</option><option value="AB">AB - جيد الدفع</option><option value="AA">AA - ممتاز</option></select>
+          </div>
+          <div class="ff"><label>المستهدف الشهري (ر.س)</label><input type="number" id="cf-target" placeholder="0" min="0"></div>
+          <div class="ff full"><label>ملاحظات</label><input type="text" id="cf-notes" placeholder="ملاحظات عن العميل..."></div>
+        </div>
+        <input type="hidden" id="cf-id">
+        <div class="btn-row">
+          <button class="btn bg" id="btn-save-customer">💾 حفظ العميل</button>
+          <button class="btn bp" id="btn-cancel-customer">إلغاء</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CUSTOMERS - CLASSIFICATION REPORT -->
+  <div class="page" id="page-cust-class">
+    <div class="mbar"><label>🏷️ تقرير تصنيف العملاء</label>
+      <button class="btn bt btn-sm" id="btn-print-class" style="margin-right:auto;">🖨️ طباعة</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;">
+      <div class="kpi blue"><div class="kpi-lbl">AA - ممتاز</div><div class="kpi-val" id="cnt-AA">0</div><div class="kpi-sub">مبيعات وسداد ممتاز</div></div>
+      <div class="kpi"><div class="kpi-lbl">AB - جيد الدفع</div><div class="kpi-val" id="cnt-AB">0</div><div class="kpi-sub">مبيعات عالية + سداد جيد</div></div>
+      <div class="kpi amber"><div class="kpi-lbl">BA - جيد المبيعات</div><div class="kpi-val" id="cnt-BA">0</div><div class="kpi-sub">مبيعات جيدة + سداد متوسط</div></div>
+      <div class="kpi red"><div class="kpi-lbl">BB - يحتاج متابعة</div><div class="kpi-val" id="cnt-BB">0</div><div class="kpi-sub">أقل من 70%</div></div>
+    </div>
+    <div class="card"><div class="card-body" style="padding:0;">
+      <table class="tbl"><thead><tr><th>العميل</th><th>المندوب</th><th>التصنيف</th><th>% المبيعات</th><th>% السداد</th><th>إجمالي المبيعات</th></tr></thead>
+      <tbody id="class-body"></tbody></table>
+    </div></div>
+  </div>
+
+  <!-- CUSTOMERS - UNVISITED -->
+  <div class="page" id="page-unvisited">
+    <div class="mbar"><label>⚠️ العملاء غير المزارين</label>
+      <input type="number" id="unvisited-days" value="7" min="1" max="90" style="width:70px;border:1.5px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12px;outline:none;margin-right:auto;">
+      <span style="font-size:12px;color:var(--muted);">أيام</span>
+      <button class="btn bp btn-sm" id="btn-unvisited-refresh">🔍 بحث</button>
+    </div>
+    <div class="card"><div class="card-body" style="padding:0;">
+      <table class="tbl"><thead><tr><th>العميل</th><th>المندوب</th><th>آخر زيارة</th><th>الأيام المنقضية</th><th>موعد الزيارة القادمة</th></tr></thead>
+      <tbody id="unvisited-body"></tbody></table>
+    </div></div>
+  </div>
+
+  <!-- PRODUCTS - LIST -->
+  <div class="page" id="page-products">
+    <div class="mbar"><label>📦 المنتجات</label>
+      <div class="search-wrap" style="margin-bottom:0;flex:1;max-width:300px;margin-right:auto;">
+        <input type="text" id="prod-search" placeholder="بحث بالاسم أو الكود...">
+        <span class="search-icon">🔍</span>
+      </div>
+      <button class="btn bg btn-sm" id="btn-new-product">+ منتج جديد</button>
+    </div>
+    <div class="card"><div class="card-body" style="padding:0;">
+      <table class="tbl"><thead><tr><th>الكود</th><th>اسم المنتج</th><th>الوحدة</th><th>السعر</th><th>الحالة</th><th class="no-print">إجراءات</th></tr></thead>
+      <tbody id="products-body"></tbody></table>
+    </div></div>
+  </div>
+
+  <!-- PRODUCTS - STAGNANT REPORT -->
+  <div class="page" id="page-stagnant">
+    <div class="mbar"><label>📉 المنتجات الراكدة</label>
+      <input type="number" id="stagnant-days" value="30" min="7" style="width:70px;border:1.5px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12px;outline:none;margin-right:auto;">
+      <span style="font-size:12px;color:var(--muted);">يوم</span>
+      <button class="btn bp btn-sm" id="btn-stagnant-refresh">🔍 بحث</button>
+      <button class="btn bt btn-sm" id="btn-print-stagnant">🖨️ طباعة</button>
+    </div>
+    <div class="card"><div class="card-body" style="padding:0;">
+      <table class="tbl"><thead><tr><th>الكود</th><th>المنتج</th><th>آخر حركة</th><th>الأيام المنقضية</th><th>إجمالي خلال الفترة</th></tr></thead>
+      <tbody id="stagnant-body"></tbody></table>
+    </div></div>
+  </div>
+
+  <!-- PRODUCTS - TOP MOVING -->
+  <div class="page" id="page-top-products">
+    <div class="mbar"><label>📈 المنتجات الأكثر حركة</label>
+      <input type="month" id="tp-month" style="margin-right:auto;">
+      <button class="btn bt btn-sm" id="btn-print-tp">🖨️ طباعة</button>
+    </div>
+    <div class="card"><div class="card-body" style="padding:0;">
+      <table class="tbl"><thead><tr><th>#</th><th>الكود</th><th>المنتج</th><th>الكمية</th><th>القيمة</th><th>عدد الصفقات</th></tr></thead>
+      <tbody id="tp-body"></tbody></table>
+    </div></div>
+  </div>
+
+  <!-- REPORTS - COMPANY -->
+  <div class="page" id="page-report-company">
+    <div class="mbar"><label>🏢 تقرير الشركة الشامل</label>
+      <input type="month" id="rep-month" style="margin-right:auto;">
+      <button class="btn b-report btn-sm" id="btn-rep-refresh">🔄 تحديث</button>
+      <button class="btn bt btn-sm" id="btn-print-rep">🖨️ طباعة</button>
+    </div>
+    <div class="kpi-grid" id="rep-kpis"></div>
+    <div class="atabs" id="rep-agent-tabs"></div>
+    <div id="rep-agent-detail"></div>
+  </div>
+
+  <!-- SETTINGS - USERS -->
+  <div class="page" id="page-users">
+    <div class="card"><div class="card-head"><h2>👥 إدارة المستخدمين</h2></div>
+      <div class="card-body">
+        <div class="sec-title">إضافة مستخدم جديد</div>
+        <div class="fg">
+          <div class="ff"><label>البريد الإلكتروني</label><input type="email" id="nu-email" placeholder="example@email.com"></div>
+          <div class="ff"><label>الاسم الكامل</label><input type="text" id="nu-name" placeholder="أحمد محمد"></div>
+          <div class="ff"><label>كلمة المرور المؤقتة</label>
+            <div class="pw-wrap"><input type="password" id="nu-pass" placeholder="سيطلب منه تغييرها"><button class="pw-eye" data-t="nu-pass">👁️</button></div>
+          </div>
+          <div class="ff"><label>الدور</label>
+		  
+  <select id="nu-role">
+     <option value="sales">مندوب مبيعات</option>
+  <option value="supervisor">مشرف فريق</option>
+  <option value="manager">مدير مبيعات</option>
+  <option value="admin">مدير الشركة</option>
+</select>
+        </div>
+        <button class="btn bg" id="btn-add-user">+ إضافة المستخدم</button>
+        <div style="margin-top:16px;">
+          <table class="tbl"><thead><tr><th>الاسم</th><th>البريد</th><th>الدور</th><th>الحالة</th><th>إجراءات</th></tr></thead>
+          <tbody id="users-body"></tbody></table>
+        </div>
+      </div>
+    </div>
+    <!-- Audit Log -->
+    <div class="card"><div class="card-head"><h2>📋 سجل العمليات</h2></div>
+      <div class="card-body" style="padding:0;">
+        <table class="tbl"><thead><tr><th>التاريخ والوقت</th><th>المستخدم</th><th>العملية</th><th>التفاصيل</th></tr></thead>
+        <tbody id="audit-body"></tbody></table>
+      </div>
+    </div>
+  </div>
+  
+  <!-- PERMISSIONS PAGE -->
+  <div class="page" id="page-permissions">
+    <div class="card">
+      <div class="card-head">
+        <h2>🔐 إدارة الصلاحيات</h2>
+        <span style="font-size:12px;color:var(--muted);margin-right:8px;">
+          التحكم في صلاحيات كل مستخدم لكل وحدة في النظام
+        </span>
+      </div>
+      <div class="card-body" style="padding:0;">
+        <div id="perm-container">
+          <div class="perm-empty">جاري التحميل...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- SETTINGS - SETUP -->
+  <div class="page" id="page-setup">
+    <div class="card"><div class="card-head"><h2>⚙️ إعداد الخطة</h2></div>
+      <div class="card-body">
+        <div class="fg fg1">
+          <div class="ff"><label>الشهر المستهدف</label><input type="month" id="setup-month"></div>
+        </div>
+        <div class="btn-row"><button class="btn bg" id="btn-save-setup">💾 حفظ الإعداد</button></div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- end app -->
+
+<script src="supabase.js"></script>
+<script src="permissions.js"></script>
+<script src="auth.js"></script>
+<script src="agents.js"></script>
+<script src="customers.js"></script>
+<script src="products.js"></script>
+<script src="visits.js"></script>
+<script src="reports.js"></script>
+<script src="permissions-ui.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
